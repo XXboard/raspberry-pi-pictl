@@ -26,7 +26,6 @@ DEFAULTS = {
     "BATTERY_REGISTER": "0x01",
     "BATTERY_CAPACITY_MAH": "2600",
     "BATTERY_CHARGE_MA": "1000",
-    "BATTERY_MAX_RAW_DIFF": "5",
     "BATTERY_LOW": "0",
     "BATTERY_AUTO_SHUTDOWN": "1",
     "OLED_ADDRESS": "0x3c",
@@ -151,8 +150,6 @@ def battery_daemon(args):
     charge_start_percent = float(state.get("charge_start_percent", displayed or 0))
     charge_start_time = float(state.get("charge_start_time", time.time()))
     discharge_start_time = state.get("discharge_start_time")
-    raw_samples = [float(value) for value in state.get("raw_samples", [])][-20:]
-    last_update = float(state.get("updated", time.time()))
     last_raw = state.get("raw")
     saw_below_full = ((last_raw is not None and float(last_raw) < 100)
                       or (last_raw is None and displayed is not None and displayed < 100))
@@ -190,31 +187,15 @@ def battery_daemon(args):
             else:
                 saw_below_full = True
                 pending_full_since = None
-                raw_samples.append(float(raw))
-                raw_samples = raw_samples[-20:]
-                ordered = sorted(raw_samples)
-                stable_samples = ordered[1:-1] if len(ordered) >= 5 else ordered
-                reference = sum(stable_samples) / len(stable_samples)
-                if displayed is None:
-                    displayed = reference
-                else:
-                    # Follow the rolling, trimmed raw average gradually, while
-                    # never remaining more than the configured margin away.
-                    limit = max(0.1, (now - last_update) / 15.0)
-                    delta = max(-limit, min(limit, reference - displayed))
-                    displayed += delta
-                    margin = max(0.0, float(cfg["BATTERY_MAX_RAW_DIFF"]))
-                    displayed = max(reference - margin, min(reference + margin, displayed))
-                    displayed = max(0.0, min(100.0, displayed))
+                displayed = float(raw)
 
             if displayed is None:
                 displayed = float(raw)
             save_battery_state(displayed, raw, charging, now,
                                charge_start_percent, charge_start_time,
-                               discharge_start_time, raw_samples)
+                               discharge_start_time)
             record_battery(displayed)
             print(f"电量：{displayed:.1f}%（原始 {raw}%，本次循环已记录）", flush=True)
-            last_update = now
             if raw <= low:
                 print(f"警告：电量达到 {low}%", file=sys.stderr, flush=True)
                 low_count += 1
@@ -246,7 +227,7 @@ def load_battery_state():
 
 def save_battery_state(percent, raw, charging, now,
                        charge_start_percent, charge_start_time,
-                       discharge_start_time, raw_samples):
+                       discharge_start_time):
     state = {
         "percent": round(percent, 4),
         "raw": raw,
@@ -255,7 +236,6 @@ def save_battery_state(percent, raw, charging, now,
         "charge_start_percent": round(charge_start_percent, 4),
         "charge_start_time": charge_start_time,
         "discharge_start_time": discharge_start_time,
-        "raw_samples": [round(value, 2) for value in raw_samples[-20:]],
     }
     temporary = BATTERY_STATE.with_suffix(".tmp")
     temporary.write_text(json.dumps(state, separators=(",", ":")), encoding="ascii")
@@ -558,7 +538,6 @@ def configure():
         "BATTERY_REGISTER": "电量寄存器",
         "BATTERY_CAPACITY_MAH": "电池容量 mAh",
         "BATTERY_CHARGE_MA": "模拟充电电流 mA",
-        "BATTERY_MAX_RAW_DIFF": "显示与放电参考值最大差值 %",
         "BATTERY_LOW": "低电量阈值 %",
         "BATTERY_AUTO_SHUTDOWN": "低电量自动关机（1/0）",
         "OLED_ADDRESS": "OLED I²C 地址",
