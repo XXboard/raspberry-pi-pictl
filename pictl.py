@@ -148,6 +148,10 @@ def battery_daemon(args):
     displayed = state.get("percent")
     displayed = float(displayed) if displayed is not None else None
     charging = state.get("status") == "charging"
+    charge_cycles = int(state.get("charge_cycles", 0))
+    discharge_cycles = int(state.get("discharge_cycles", 0))
+    if "charge_cycles" not in state and "discharge_cycles" not in state:
+        discharge_cycles = 0 if charging else 1
     charge_start_percent = float(state.get("charge_start_percent", displayed or 0))
     charge_start_time = float(state.get("charge_start_time", time.time()))
     discharge_start_time = state.get("discharge_start_time")
@@ -172,11 +176,14 @@ def battery_daemon(args):
         try:
             raw = battery_value()
             now = time.time()
+            session_changed = False
             if charging and raw == 100:
                 gained = (now - charge_start_time) * charge_ma / (capacity_mah * 3600) * 100
                 displayed = min(100.0, charge_start_percent + gained)
             elif charging:
                 charging = False
+                discharge_cycles += 1
+                session_changed = True
                 discharge_start_time = now
                 saw_below_full = True
                 pending_full_since = None
@@ -192,6 +199,8 @@ def battery_daemon(args):
                     charge_start_percent = displayed if displayed is not None else 0.0
                 if saw_below_full and now - pending_full_since >= BATTERY_FULL_CONFIRM_SECONDS:
                     charging = True
+                    charge_cycles += 1
+                    session_changed = True
                     discharge_start_time = None
                     charge_start_time = pending_full_since
                     gained = (now - charge_start_time) * charge_ma / (capacity_mah * 3600) * 100
@@ -210,7 +219,10 @@ def battery_daemon(args):
                 displayed = float(raw)
             save_battery_state(displayed, raw, charging, now,
                                charge_start_percent, charge_start_time,
-                               discharge_start_time)
+                               discharge_start_time, charge_cycles,
+                               discharge_cycles)
+            if session_changed:
+                reset_battery_log()
             record_battery(displayed)
             print(f"电量：{displayed:.1f}%（原始 {raw}%，本次循环已记录）", flush=True)
             last_update = now
@@ -236,6 +248,11 @@ def record_battery(value):
         handle.write(f"{now},{value:.2f}\n")
 
 
+def reset_battery_log():
+    """Discard the completed session and start a new current-session log."""
+    BATTERY_LOG.write_text("timestamp,percent\n", encoding="ascii")
+
+
 def load_battery_state():
     try:
         return json.loads(BATTERY_STATE.read_text(encoding="ascii"))
@@ -245,7 +262,8 @@ def load_battery_state():
 
 def save_battery_state(percent, raw, charging, now,
                        charge_start_percent, charge_start_time,
-                       discharge_start_time):
+                       discharge_start_time, charge_cycles,
+                       discharge_cycles):
     state = {
         "percent": round(percent, 4),
         "raw": raw,
@@ -254,6 +272,8 @@ def save_battery_state(percent, raw, charging, now,
         "charge_start_percent": round(charge_start_percent, 4),
         "charge_start_time": charge_start_time,
         "discharge_start_time": discharge_start_time,
+        "charge_cycles": charge_cycles,
+        "discharge_cycles": discharge_cycles,
     }
     temporary = BATTERY_STATE.with_suffix(".tmp")
     temporary.write_text(json.dumps(state, separators=(",", ":")), encoding="ascii")
