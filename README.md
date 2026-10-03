@@ -51,6 +51,7 @@ The `--full` option installs dependencies and configures:
 - PCF8563 RTC support
 - Network time synchronization
 - Automatic startup through systemd
+- Desktop mouse speed `1` for GNOME and X11
 
 ## Basic installation
 

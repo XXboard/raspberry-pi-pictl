@@ -86,7 +86,20 @@ if [[ "${model}" == *"Raspberry Pi"* ]]; then
     echo "正在配置完整硬件功能..."
     /usr/bin/pictl time setup
     systemctl enable pictl-display.service pictl-battery.service
+    install -d -m 0755 /etc/X11/xorg.conf.d
+    cat >/etc/X11/xorg.conf.d/90-pictl-mouse.conf <<'EOF'
+Section "InputClass"
+    Identifier "PiCtl mouse speed"
+    MatchIsPointer "on"
+    Option "AccelSpeed" "1"
+EndSection
+EOF
+    desktop_user="${SUDO_USER:-}"
+    if [[ -n "${desktop_user}" && "${desktop_user}" != "root" ]] && command -v gsettings >/dev/null 2>&1; then
+      runuser -u "${desktop_user}" -- dbus-run-session gsettings set org.gnome.desktop.peripherals.mouse speed 1.0 || true
+    fi
     echo "OLED、逐次电量记录、0% 自动关机、RTC 和网络校时已设置为开机启动。"
+    echo "桌面鼠标速度已设置为 1。"
   fi
 else
   echo "未检测到 Raspberry Pi 硬件，程序已安装，但未启动 GPIO 风扇服务。"

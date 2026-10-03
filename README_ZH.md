@@ -37,6 +37,7 @@ sudo reboot
 - 设置 `Asia/Shanghai` 中国时区
 - 启用 PCF8563 和网络自动校时
 - 设置全部 systemd 开机服务
+- 将 GNOME/X11 桌面鼠标速度设置为 `1`
 
 > 默认硬件参数为风扇 BCM GPIO 13、OLED `0x3C`（128×32）、PCF8563 `0x51`、电量芯片 `0x66`。硬件不同请在安装后运行 `sudo pictl config` 修改。
 
