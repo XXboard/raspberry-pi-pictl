@@ -322,12 +322,12 @@ def battery_session_history(history=None):
 
 def battery_elapsed_text(history):
     if not history:
-        return "USED 00:00"
+        return "00 HOUR 00 MINUTS"
     discharge_start = load_battery_state().get("discharge_start_time")
     start = float(discharge_start) if discharge_start is not None else history[0][0]
     elapsed = int(max(0, history[-1][0] - start))
     hours, remainder = divmod(elapsed, 3600)
-    return f"USED {hours:02d}:{remainder // 60:02d}"
+    return f"{hours:02d} HOUR {remainder // 60:02d} MINUTS"
 
 
 class SSD1306:
