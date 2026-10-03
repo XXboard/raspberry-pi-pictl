@@ -23,7 +23,7 @@ The installer detects Raspberry Pi hardware and installs the `lgpio` backend whe
 | SSD1306 OLED | I²C `0x3C`, 128×32 |
 | PCF8563 RTC | I²C `0x51` |
 | Battery gauge | I²C `0x66`, register `0x01` |
-| Low-battery shutdown | 5% after three consecutive readings |
+| Low-battery shutdown | 0% after three consecutive readings |
 | Time zone | `Asia/Shanghai` |
 
 > Do not power a fan directly from a GPIO pin. Use a suitable transistor or MOSFET driver and a correctly rated power supply.
@@ -45,8 +45,8 @@ The `--full` option installs dependencies and configures:
 - The `pictl` command and Chinese interactive menu
 - Automatic temperature-controlled fan operation
 - A two-line rotating SSD1306 OLED status display
-- Battery logging and a battery-versus-time graph
-- Safe automatic shutdown at 5%
+- Battery logging on every monitoring loop
+- Safe automatic shutdown at 0%
 - PCF8563 RTC support
 - Network time synchronization
 - Automatic startup through systemd
@@ -101,7 +101,6 @@ The default 128×32 display rotates through two-line pages containing:
 - CPU temperature and fan mode
 - Battery percentage and elapsed runtime
 - IP address
-- Battery-versus-time graph
 
 ### Battery monitoring
 
@@ -111,13 +110,13 @@ sudo pictl battery enable
 sudo pictl battery disable
 ```
 
-The monitor averages ten readings and appends a sample approximately every 30 seconds to:
+The monitor appends every reading (one monitoring loop approximately every 3 seconds) to:
 
 ```text
 /var/lib/pictl/battery.csv
 ```
 
-The data survives reboot because it is stored on the SD card. When three consecutive averaged readings are at or below 5%, PiCtl performs a safe system shutdown.
+The data survives reboot because it is stored on the SD card. Runtime is recalculated from the beginning of the latest full-charge cycle, while older cycles remain in the log. When three consecutive readings are at 0%, PiCtl performs a safe system shutdown.
 
 ### Time and PCF8563 RTC
 

@@ -21,7 +21,7 @@ DEFAULTS = {
     "I2C_BUS": "1",
     "BATTERY_ADDRESS": "0x66",
     "BATTERY_REGISTER": "0x01",
-    "BATTERY_LOW": "5",
+    "BATTERY_LOW": "0",
     "BATTERY_AUTO_SHUTDOWN": "1",
     "OLED_ADDRESS": "0x3c",
     "OLED_WIDTH": "128",
@@ -139,28 +139,22 @@ def battery_daemon(args):
     low_count = 0
     BATTERY_LOG.parent.mkdir(parents=True, exist_ok=True)
     while True:
-        samples = []
-        for _ in range(10):
-            try:
-                samples.append(battery_value())
-            except Exception as exc:
-                print(f"电量读取失败：{exc}", file=sys.stderr, flush=True)
-            time.sleep(3)
-        if len(samples) >= 3:
-            samples.remove(min(samples))
-            samples.remove(max(samples))
-            value = sum(samples) / len(samples)
-            print(f"电量：{value:.1f}%", flush=True)
+        try:
+            value = battery_value()
             record_battery(value)
+            print(f"电量：{value}%（本次循环已记录）", flush=True)
             if value <= low:
-                print(f"警告：电量低于 {low}%", file=sys.stderr, flush=True)
+                print(f"警告：电量达到 {low}%", file=sys.stderr, flush=True)
                 low_count += 1
                 if auto_shutdown and low_count >= 3:
-                    print(f"电量连续三次低于 {low}%，正在安全关机。", file=sys.stderr, flush=True)
+                    print(f"电量连续三次达到 {low}%，正在安全关机。", file=sys.stderr, flush=True)
                     run(["systemctl", "poweroff"], check=True)
                     return
             else:
                 low_count = 0
+        except Exception as exc:
+            print(f"电量读取失败：{exc}", file=sys.stderr, flush=True)
+        time.sleep(3)
 
 
 def record_battery(value):
@@ -185,8 +179,15 @@ def battery_history():
 
 
 def battery_session_history():
-    """Return all samples from the moment recording started."""
-    return battery_history()
+    """Return samples from the start of the latest full-charge cycle."""
+    history = battery_history()
+    if not history:
+        return []
+    start = 0
+    for index in range(1, len(history)):
+        if history[index][1] >= 99 and history[index - 1][1] < 99:
+            start = index
+    return history[start:]
 
 
 def battery_elapsed_text(history):
@@ -269,31 +270,6 @@ def oled_frame(cfg, page=0):
         (f"BAT  {battery}", battery_elapsed_text(session_history)),
         ("IP ADDRESS", local_ip()),
     ]
-    history = session_history
-    if page % 5 == 4:
-        title_font = font(9 if height <= 32 else 14)
-        if history:
-            title = f"BAT {history[-1][1]:.0f}% {battery_elapsed_text(history)[5:]}"
-            draw.text((0, 0), title, font=title_font, fill=255)
-            graph_top = 11 if height <= 32 else 18
-            usable = history
-            if len(usable) > width:
-                step = (len(usable) - 1) / (width - 1)
-                usable = [usable[round(index * step)] for index in range(width)]
-            coords = []
-            for index, (_, value) in enumerate(usable):
-                x = 0 if len(usable) == 1 else round(index * (width - 1) / (len(usable) - 1))
-                y = graph_top + round((100 - max(0, min(100, value))) * (height - graph_top - 1) / 100)
-                coords.append((x, y))
-            if len(coords) > 1:
-                draw.line(coords, fill=255, width=1)
-            elif coords:
-                draw.point(coords[0], fill=255)
-        else:
-            draw.text((0, height // 3), "BAT USED 00:00", font=title_font, fill=255)
-        if cfg["OLED_ROTATE"] == "180":
-            image = image.rotate(180)
-        return image
     lines = pages[page % len(pages)]
     size = 13 if height <= 32 else 24
     row_height = height // 2
@@ -323,7 +299,7 @@ def display_daemon(args):
         delay = max(1.0, float(cfg["OLED_PAGE_SECONDS"]))
         while True:
             display.show(oled_frame(cfg, page))
-            page = (page + 1) % 5
+            page = (page + 1) % 4
             time.sleep(delay)
     finally:
         display.clear()

@@ -59,7 +59,7 @@ FAN_OFF_TEMP=39
 I2C_BUS=1
 BATTERY_ADDRESS=0x66
 BATTERY_REGISTER=0x01
-BATTERY_LOW=5
+BATTERY_LOW=0
 BATTERY_AUTO_SHUTDOWN=1
 OLED_ADDRESS=0x3c
 OLED_WIDTH=128
@@ -83,7 +83,7 @@ if [[ "${model}" == *"Raspberry Pi"* ]]; then
     echo "正在配置完整硬件功能..."
     /usr/bin/pictl time setup
     systemctl enable pictl-display.service pictl-battery.service
-    echo "OLED、电量记录、5% 自动关机、RTC 和网络校时已设置为开机启动。"
+    echo "OLED、逐次电量记录、0% 自动关机、RTC 和网络校时已设置为开机启动。"
   fi
 else
   echo "未检测到 Raspberry Pi 硬件，程序已安装，但未启动 GPIO 风扇服务。"
