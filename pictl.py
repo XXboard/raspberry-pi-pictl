@@ -179,14 +179,24 @@ def battery_history():
     return points
 
 
-def battery_session_history():
+def battery_is_charging(history):
+    """Return true after the current 100% run has lasted three minutes."""
+    if not history or history[-1][1] != 100:
+        return False
+    run_start = len(history) - 1
+    while run_start > 0 and history[run_start - 1][1] == 100:
+        run_start -= 1
+    return history[-1][0] - history[run_start][0] >= BATTERY_FULL_CONFIRM_SECONDS
+
+
+def battery_session_history(history=None):
     """Return the active discharge cycle after a confirmed full charge.
 
     A full charge is only confirmed when the gauge remains at exactly 100%
     for at least three minutes. While it remains full, elapsed time stays at
     zero. Once it drops, timing starts from the final 100% sample.
     """
-    history = battery_history()
+    history = battery_history() if history is None else history
     if not history:
         return []
     confirmed_end = None
@@ -284,12 +294,14 @@ def oled_frame(cfg, page=0):
     except Exception:
         battery = "--"
     mode = FAN_MODE.read_text().strip() if FAN_MODE.exists() else "auto"
-    session_history = battery_session_history()
+    full_history = battery_history()
+    session_history = battery_session_history(full_history)
+    charging = battery_is_charging(full_history)
     pages = [
         (datetime.datetime.now().strftime("TIME %H:%M:%S"),
          datetime.datetime.now().strftime("DATE %m-%d")),
         (f"CPU  {temperature():.1f} C", f"FAN  {mode.upper()}"),
-        (f"BAT  {battery}", battery_elapsed_text(session_history)),
+        (f"BAT  {battery}", "CHARGING" if charging else battery_elapsed_text(session_history)),
         ("IP ADDRESS", local_ip()),
     ]
     lines = pages[page % len(pages)]
