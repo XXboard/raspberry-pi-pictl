@@ -432,10 +432,17 @@ def display_daemon(args):
     try:
         page = 0
         delay = max(1.0, float(cfg["OLED_PAGE_SECONDS"]))
+        page_started = time.monotonic()
         while True:
+            now = time.monotonic()
+            if now - page_started >= delay:
+                page = (page + 1) % 4
+                page_started = now
             display.show(oled_frame(cfg, page))
-            page = (page + 1) % 4
-            time.sleep(delay)
+            # Redraw once per second so the clock keeps moving while the
+            # time page remains visible. Page rotation still uses the
+            # configured OLED_PAGE_SECONDS value.
+            time.sleep(1)
     finally:
         display.clear()
         display.close()

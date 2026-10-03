@@ -5,6 +5,7 @@ After=multi-user.target pictl-fan.service
 [Service]
 Type=simple
 ExecStartPre=/sbin/modprobe i2c-dev
+ExecStartPre=-/usr/bin/pictl rtc rtc-to-system
 ExecStart=/usr/bin/pictl display-daemon
 Restart=on-failure
 RestartSec=5
