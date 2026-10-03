@@ -14,7 +14,7 @@ from pathlib import Path
 CONFIG = Path("/etc/pictl.conf")
 FAN_MODE = Path("/etc/pictl-fan-mode")
 BATTERY_LOG = Path("/var/lib/pictl/battery.csv")
-BATTERY_FULL_CONFIRM_SECONDS = 10
+BATTERY_FULL_CONFIRM_SECONDS = 3
 DEFAULTS = {
     "FAN_GPIO": "13",
     "FAN_ON_TEMP": "60",
@@ -180,7 +180,7 @@ def battery_history():
 
 
 def battery_is_charging(history):
-    """Return true after a below-full reading rises to 100% for ten seconds."""
+    """Return true after a below-full reading rises to 100% for three seconds."""
     if not history or history[-1][1] != 100:
         return False
     run_start = len(history) - 1
@@ -195,7 +195,7 @@ def battery_session_history(history=None):
     """Return the active discharge cycle after a confirmed full charge.
 
     Charging is confirmed when a below-full reading rises to exactly 100%
-    and remains there for at least ten seconds. While it remains full,
+    and remains there for at least three seconds. While it remains full,
     elapsed time stays at zero. Once it drops, timing starts from the final
     100% sample.
     """

@@ -116,7 +116,7 @@ The monitor appends every reading (one monitoring loop approximately every 3 sec
 /var/lib/pictl/battery.csv
 ```
 
-The data survives reboot because it is stored on the SD card. Charging is confirmed when a reading below 100% rises to 100% and remains unchanged for at least 10 seconds; shorter 100% spikes do not reset the timer. The OLED then shows `CHARGING`, the previous discharge time is reset, and charging time is excluded from `USED`. Timing begins from the final 100% reading when discharge starts again. Raw charging readings and older cycles remain in the log. When three consecutive readings are at 0%, PiCtl performs a safe system shutdown.
+The data survives reboot because it is stored on the SD card. Charging is confirmed when a reading below 100% rises to 100% and remains unchanged for at least 3 seconds; shorter 100% spikes do not reset the timer. The OLED then shows `CHARGING`, the previous discharge time is reset, and charging time is excluded from `USED`. Timing begins from the final 100% reading when discharge starts again. Raw charging readings and older cycles remain in the log. When three consecutive readings are at 0%, PiCtl performs a safe system shutdown.
 
 ### Time and PCF8563 RTC
 
