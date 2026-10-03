@@ -152,6 +152,16 @@ def battery_daemon(args):
     charge_start_time = float(state.get("charge_start_time", time.time()))
     discharge_start_time = state.get("discharge_start_time")
     last_update = float(state.get("updated", time.time()))
+    startup_time = time.time()
+    # Count actual monitored discharge time, not time while the Pi was off or
+    # a large correction when NTP/RTC fixes an incorrect system clock.
+    if not charging:
+        if discharge_start_time is None:
+            discharge_start_time = startup_time
+        else:
+            offline_gap = startup_time - last_update
+            if offline_gap > 300:
+                discharge_start_time = float(discharge_start_time) + offline_gap
     last_raw = state.get("raw")
     saw_below_full = ((last_raw is not None and float(last_raw) < 100)
                       or (last_raw is None and displayed is not None and displayed < 100))
@@ -324,7 +334,16 @@ def battery_elapsed_text(history):
     if not history:
         return "00 HOUR 00 MINUTS"
     discharge_start = load_battery_state().get("discharge_start_time")
-    start = float(discharge_start) if discharge_start is not None else history[0][0]
+    if discharge_start is not None:
+        start = float(discharge_start)
+    else:
+        # Older state files did not always contain discharge_start_time.
+        # Start after the latest large gap so a corrected system clock does
+        # not turn a few minutes of use into thousands of hours.
+        start = history[0][0]
+        for previous, current in zip(history, history[1:]):
+            if current[0] - previous[0] > 300:
+                start = current[0]
     elapsed = int(max(0, history[-1][0] - start))
     hours, remainder = divmod(elapsed, 3600)
     return f"{hours:02d} HOUR {remainder // 60:02d} MINUTS"
