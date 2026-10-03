@@ -23,7 +23,7 @@ The installer detects Raspberry Pi hardware and installs the `lgpio` backend whe
 | SSD1306 OLED | I²C `0x3C`, 128×32 |
 | PCF8563 RTC | I²C `0x51` |
 | Battery gauge | I²C `0x66`, register `0x01` |
-| Battery model | 2600mAh capacity, 1000mA charge rate |
+| Battery model | 2600mAh capacity, 1000mA charge rate, max 5% discharge-reference difference |
 | Low-battery shutdown | 0% after three consecutive readings |
 | Time zone | `Asia/Shanghai` |
 
@@ -117,7 +117,7 @@ The monitor appends every reading (one monitoring loop approximately every 3 sec
 /var/lib/pictl/battery.csv
 ```
 
-The data survives reboot because it is stored on the SD card. Charging is confirmed when a reading below 100% rises to 100% and remains unchanged for at least 3 seconds. Instead of jumping to 100%, the displayed level starts at the previous stable level and rises using the configured 2600mAh capacity and 1000mA charge rate (about 38.5 percentage points per hour). Normal readings are rate-limited to stop noisy raw values from making the OLED jump. The OLED shows `CHARGING`, charging time is excluded from `USED`, and a new discharge timer starts when charging ends. Raw readings, the stable state, and older cycles survive reboot. When three consecutive raw readings are at 0%, PiCtl performs a safe system shutdown.
+The data survives reboot because it is stored on the SD card. Charging is confirmed when a reading below 100% rises to 100% and remains unchanged for at least 3 seconds. Instead of jumping to 100%, the displayed level starts at the previous stable level and rises using the configured 2600mAh capacity and 1000mA charge rate (about 38.5 percentage points per hour). During discharge, the last 20 raw readings (about one minute) form a trimmed rolling reference. The displayed value follows it smoothly and stays within 5 percentage points, preventing both rapid jumps and long-term drift. The OLED shows `CHARGING`, charging time is excluded from `USED`, and a new discharge timer starts when charging ends. State survives reboot. When three consecutive raw readings are at 0%, PiCtl performs a safe system shutdown.
 
 ### Time and PCF8563 RTC
 
