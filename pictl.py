@@ -14,6 +14,7 @@ from pathlib import Path
 CONFIG = Path("/etc/pictl.conf")
 FAN_MODE = Path("/etc/pictl-fan-mode")
 BATTERY_LOG = Path("/var/lib/pictl/battery.csv")
+BATTERY_FULL_CONFIRM_SECONDS = 180
 DEFAULTS = {
     "FAN_GPIO": "13",
     "FAN_ON_TEMP": "60",
@@ -179,15 +180,36 @@ def battery_history():
 
 
 def battery_session_history():
-    """Return samples from the start of the latest full-charge cycle."""
+    """Return the active discharge cycle after a confirmed full charge.
+
+    A full charge is only confirmed when the gauge remains at exactly 100%
+    for at least three minutes. While it remains full, elapsed time stays at
+    zero. Once it drops, timing starts from the final 100% sample.
+    """
     history = battery_history()
     if not history:
         return []
-    start = 0
-    for index in range(1, len(history)):
-        if history[index][1] >= 99 and history[index - 1][1] < 99:
-            start = index
-    return history[start:]
+    confirmed_end = None
+    full_run_start = None
+    for index, (stamp, value) in enumerate(history):
+        if value == 100:
+            if full_run_start is None:
+                full_run_start = index
+            if stamp - history[full_run_start][0] >= BATTERY_FULL_CONFIRM_SECONDS:
+                confirmed_end = index
+        else:
+            full_run_start = None
+
+    if confirmed_end is None:
+        return history
+
+    # If the current confirmed 100% run is still active, do not count the
+    # time spent connected to the charger as battery-use time.
+    if (history[-1][1] == 100 and full_run_start is not None
+            and confirmed_end >= full_run_start):
+        return history[-1:]
+
+    return history[confirmed_end:]
 
 
 def battery_elapsed_text(history):

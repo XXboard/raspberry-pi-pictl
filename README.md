@@ -116,7 +116,7 @@ The monitor appends every reading (one monitoring loop approximately every 3 sec
 /var/lib/pictl/battery.csv
 ```
 
-The data survives reboot because it is stored on the SD card. Runtime is recalculated from the beginning of the latest full-charge cycle, while older cycles remain in the log. When three consecutive readings are at 0%, PiCtl performs a safe system shutdown.
+The data survives reboot because it is stored on the SD card. A new full-charge cycle is confirmed only after the battery remains at 100% for at least three minutes; brief 100% readings do not reset the timer. While it remains full, elapsed runtime stays at zero, and timing begins from the final 100% reading when discharge starts. Older cycles remain in the log. When three consecutive readings are at 0%, PiCtl performs a safe system shutdown.
 
 ### Time and PCF8563 RTC
 
