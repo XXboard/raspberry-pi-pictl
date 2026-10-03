@@ -1,85 +1,231 @@
-# Raspberry Pi 简易管理工具
+# Raspberry Pi PiCtl
 
-[English documentation](README_EN.md)
+[中文说明](README_ZH.md)
 
-把旧笔记中的温控风扇、PCF8563 时钟和 I²C 电量检测整理成一个工具。
+PiCtl is a lightweight Raspberry Pi management utility for a temperature-controlled fan, SSD1306 OLED status display, PCF8563 real-time clock, and an I²C battery gauge.
 
-支持使用 `apt` 和 systemd 的树莓派发行版：
+## Supported systems
 
-- Raspberry Pi OS（32/64 位）
+- Raspberry Pi OS, 32-bit or 64-bit
 - Ubuntu for Raspberry Pi
 - Kali Linux ARM
-- 其他基于 Debian/Ubuntu 的树莓派系统
+- Other Raspberry Pi distributions based on Debian or Ubuntu with `apt` and systemd
 
-安装器会检测树莓派硬件，并在软件源提供时自动安装 `lgpio`，兼容较新的树莓派型号。
+The installer detects Raspberry Pi hardware and installs the `lgpio` backend when it is available, improving compatibility with newer Raspberry Pi boards.
 
-完整接线、安装、操作和排错方法请参阅 [使用说明.md](使用说明.md)。
+## Default hardware configuration
 
-## 一键完整安装
+| Device | Default setting |
+|---|---|
+| Fan | BCM GPIO 13 |
+| Fan start temperature | 60°C |
+| Fan stop temperature | 39°C |
+| SSD1306 OLED | I²C `0x3C`, 128×32 |
+| PCF8563 RTC | I²C `0x51` |
+| Battery gauge | I²C `0x66`, register `0x01` |
+| Low-battery shutdown | 5% after three consecutive readings |
+| Time zone | `Asia/Shanghai` |
 
-在 Raspberry Pi OS、Ubuntu for Raspberry Pi 或 Kali ARM 中执行：
+> Do not power a fan directly from a GPIO pin. Use a suitable transistor or MOSFET driver and a correctly rated power supply.
+
+## One-command full installation
+
+Run the following on your Raspberry Pi:
 
 ```bash
-sudo apt update && sudo apt install -y git
-git clone https://github.com/XXboard/raspberry-pi-pictl.git
-cd raspberry-pi-pictl
-sudo bash install.sh --full
+sudo apt update && sudo apt install -y git && \
+git clone https://github.com/XXboard/raspberry-pi-pictl.git && \
+cd raspberry-pi-pictl && \
+sudo bash install.sh --full && \
 sudo reboot
 ```
 
-`--full` 会一次完成：
+The `--full` option installs dependencies and configures:
 
-- 安装 Python、GPIO、I²C 和 OLED 依赖
-- 安装 `pictl` 中文管理命令
-- 启用 60°C 开、39°C 关的温控风扇
-- 启用 SSD1306 OLED 两行轮播
-- 启用电量曲线记录和 5% 自动安全关机
-- 设置 `Asia/Shanghai` 中国时区
-- 启用 PCF8563 和网络自动校时
-- 设置全部 systemd 开机服务
+- The `pictl` command and Chinese interactive menu
+- Automatic temperature-controlled fan operation
+- A two-line rotating SSD1306 OLED status display
+- Battery logging and a battery-versus-time graph
+- Safe automatic shutdown at 5%
+- PCF8563 RTC support
+- Network time synchronization
+- Automatic startup through systemd
 
-> 默认硬件参数为风扇 BCM GPIO 13、OLED `0x3C`（128×32）、PCF8563 `0x51`、电量芯片 `0x66`。硬件不同请在安装后运行 `sudo pictl config` 修改。
+## Basic installation
 
-## 基础安装
+If you only want to install the software and fan service:
 
 ```bash
-chmod +x install.sh
-sudo ./install.sh
+git clone https://github.com/XXboard/raspberry-pi-pictl.git
+cd raspberry-pi-pictl
+sudo bash install.sh
 ```
 
-安装后直接运行中文菜单：
+## Common commands
+
+Open the interactive menu:
 
 ```bash
 sudo pictl
 ```
 
-常用命令：
+Check all services and settings:
 
 ```bash
-pictl status                 # 查看状态
-pictl temp                   # 查看 CPU 温度
-sudo pictl fan auto          # 温控模式
-sudo pictl fan on            # 强制开启
-sudo pictl fan off           # 强制关闭
-sudo pictl config            # 修改 GPIO、温度和 I²C 参数
-sudo pictl rtc setup         # 配置 PCF8563（启用 I²C）
-pictl rtc read               # 读取硬件时钟
-pictl battery                # 读取一次电量
-sudo pictl battery enable    # 启用电量监控服务
-sudo pictl display on        # 启用 SSD1306 OLED 状态显示
-sudo pictl display test      # 发送一次测试画面
-sudo pictl time setup        # 设置中国时区、网络校时和 RTC 自动同步
-pictl time status            # 查看时间同步状态
-sudo pictl uninstall         # 卸载
+pictl status
 ```
 
-配置保存在 `/etc/pictl.conf`。默认使用 BCM GPIO 13；风扇高于 60°C 开启，低于 39°C 关闭。OLED 默认使用 I²C 地址 `0x3c`、128×32 分辨率（原 Adafruit `stats.py` 的默认型号），并以两行大字每 3 秒轮播时间/日期、温度/风扇和电量/IP；分辨率及换页时间可通过 `sudo pictl config` 修改。
+### Fan
 
-电量监控约每 30 秒保存一个平均值到 `/var/lib/pictl/battery.csv`。从第一条记录开始累计使用时间，OLED 会显示已使用小时:分钟及电量—时间曲线；连续三次检测到 5% 或更低时自动安全关机。
+```bash
+sudo pictl fan auto    # Temperature-controlled mode
+sudo pictl fan on      # Force on
+sudo pictl fan off     # Force off
+pictl temp             # Show CPU temperature
+```
 
-## 注意
+The default hysteresis is 60°C on and 39°C off. Between these temperatures, the previous fan state is retained to prevent rapid switching.
 
-- 面向带 GPIO 的 Raspberry Pi 和 Debian/Kali/Raspberry Pi OS。
-- 风扇控制脚必须经过合适的三极管/MOSFET 驱动，不要直接用 GPIO 给风扇供电。
-- 电量芯片因原项目没有留下芯片型号和寄存器定义，默认按 I²C 总线 1、地址 `0x66`、寄存器 `0x01` 读取 0–100。可在 `sudo pictl config` 中修改。
-- PCF8563 使用 Linux 内核的 `rtc-pcf8563` 驱动，不再下载旧 Python 仓库。
+### OLED display
+
+```bash
+sudo pictl display on
+sudo pictl display off
+sudo pictl display test
+pictl display status
+```
+
+The default 128×32 display rotates through two-line pages containing:
+
+- Time and date
+- CPU temperature and fan mode
+- Battery percentage and elapsed runtime
+- IP address
+- Battery-versus-time graph
+
+### Battery monitoring
+
+```bash
+pictl battery
+sudo pictl battery enable
+sudo pictl battery disable
+```
+
+The monitor averages ten readings and appends a sample approximately every 30 seconds to:
+
+```text
+/var/lib/pictl/battery.csv
+```
+
+The data survives reboot because it is stored on the SD card. When three consecutive averaged readings are at or below 5%, PiCtl performs a safe system shutdown.
+
+### Time and PCF8563 RTC
+
+```bash
+sudo pictl time setup
+pictl time status
+pictl rtc read
+sudo pictl rtc system-to-rtc
+sudo pictl rtc rtc-to-system
+```
+
+The time synchronization timer checks periodically. After network time has synchronized, it writes the correct UTC time to the PCF8563.
+
+## Configuration
+
+Run:
+
+```bash
+sudo pictl config
+```
+
+Press Enter to keep the current value. Settings are stored in:
+
+```text
+/etc/pictl.conf
+```
+
+After changing fan or display settings, restart the relevant services:
+
+```bash
+sudo systemctl restart pictl-fan.service
+sudo systemctl restart pictl-display.service
+```
+
+## Checking I²C devices
+
+```bash
+sudo modprobe i2c-dev
+sudo i2cdetect -y 1
+```
+
+Expected addresses for the default hardware are:
+
+- `3C`: SSD1306 OLED
+- `51` or `UU`: PCF8563 RTC
+- `66`: Battery gauge
+
+## Service status and logs
+
+```bash
+systemctl status pictl-fan.service
+systemctl status pictl-display.service
+systemctl status pictl-battery.service
+systemctl status pictl-time-sync.timer
+```
+
+To inspect recent errors:
+
+```bash
+journalctl -u pictl-fan.service -n 50 --no-pager
+journalctl -u pictl-display.service -n 50 --no-pager
+journalctl -u pictl-battery.service -n 50 --no-pager
+```
+
+## Troubleshooting
+
+### OLED does not display anything
+
+1. Check VCC, GND, SDA, and SCL wiring.
+2. Confirm that `sudo i2cdetect -y 1` shows address `0x3C`.
+3. Run `sudo pictl display test`.
+4. If the display is 128×64, run `sudo pictl config`, change the OLED height to `64`, and restart `pictl-display.service`.
+
+### OLED is upside down
+
+Run `sudo pictl config`, change OLED rotation to `180`, then restart the display service.
+
+### Fan does not run
+
+Check the BCM GPIO number, driver transistor or MOSFET, fan power supply, and ground connection. Test with:
+
+```bash
+sudo pictl fan on
+```
+
+### Time is incorrect
+
+```bash
+sudo pictl time setup
+pictl time status
+sudo pictl rtc system-to-rtc
+```
+
+## Updating
+
+```bash
+cd ~/raspberry-pi-pictl
+git pull
+sudo bash install.sh --full
+sudo reboot
+```
+
+The existing `/etc/pictl.conf` file is preserved during reinstallation.
+
+## Uninstalling
+
+```bash
+sudo pictl uninstall
+```
+
+PiCtl stops and removes its services and program files. `/etc/pictl.conf` is retained so that settings can be reused after a future installation.
