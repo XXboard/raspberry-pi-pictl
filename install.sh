@@ -25,7 +25,7 @@ if ! command -v systemctl >/dev/null 2>&1; then
 fi
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-for file in pictl.py pictl-fan.service pictl-battery.service pictl-display.service pictl-time-sync.service pictl-time-sync.timer; do
+for file in pictl.py pictl-fan.service pictl-battery.service pictl-display.service pictl-time-sync.service pictl-time-sync.timer 90-pictl-mouse.conf; do
   [[ -f "${SCRIPT_DIR}/${file}" ]] || { echo "缺少文件：${file}" >&2; exit 1; }
 done
 
@@ -87,13 +87,7 @@ if [[ "${model}" == *"Raspberry Pi"* ]]; then
     /usr/bin/pictl time setup
     systemctl enable pictl-display.service pictl-battery.service
     install -d -m 0755 /etc/X11/xorg.conf.d
-    cat >/etc/X11/xorg.conf.d/90-pictl-mouse.conf <<'EOF'
-Section "InputClass"
-    Identifier "PiCtl mouse speed"
-    MatchIsPointer "on"
-    Option "AccelSpeed" "1"
-EndSection
-EOF
+    install -m 0644 "${SCRIPT_DIR}/90-pictl-mouse.conf" /etc/X11/xorg.conf.d/90-pictl-mouse.conf
     desktop_user="${SUDO_USER:-}"
     if [[ -n "${desktop_user}" && "${desktop_user}" != "root" ]] && command -v gsettings >/dev/null 2>&1; then
       runuser -u "${desktop_user}" -- dbus-run-session gsettings set org.gnome.desktop.peripherals.mouse speed 1.0 || true
