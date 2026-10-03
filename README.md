@@ -23,6 +23,7 @@ The installer detects Raspberry Pi hardware and installs the `lgpio` backend whe
 | SSD1306 OLED | I²C `0x3C`, 128×32 |
 | PCF8563 RTC | I²C `0x51` |
 | Battery gauge | I²C `0x66`, register `0x01` |
+| Battery model | 2600mAh capacity, 1000mA charge rate |
 | Low-battery shutdown | 0% after three consecutive readings |
 | Time zone | `Asia/Shanghai` |
 
@@ -116,7 +117,7 @@ The monitor appends every reading (one monitoring loop approximately every 3 sec
 /var/lib/pictl/battery.csv
 ```
 
-The data survives reboot because it is stored on the SD card. Charging is confirmed when a reading below 100% rises to 100% and remains unchanged for at least 3 seconds; shorter 100% spikes do not reset the timer. The OLED then shows `CHARGING`, the previous discharge time is reset, and charging time is excluded from `USED`. Timing begins from the final 100% reading when discharge starts again. Raw charging readings and older cycles remain in the log. When three consecutive readings are at 0%, PiCtl performs a safe system shutdown.
+The data survives reboot because it is stored on the SD card. Charging is confirmed when a reading below 100% rises to 100% and remains unchanged for at least 3 seconds. Instead of jumping to 100%, the displayed level starts at the previous stable level and rises using the configured 2600mAh capacity and 1000mA charge rate (about 38.5 percentage points per hour). Normal readings are rate-limited to stop noisy raw values from making the OLED jump. The OLED shows `CHARGING`, charging time is excluded from `USED`, and a new discharge timer starts when charging ends. Raw readings, the stable state, and older cycles survive reboot. When three consecutive raw readings are at 0%, PiCtl performs a safe system shutdown.
 
 ### Time and PCF8563 RTC
 

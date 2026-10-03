@@ -3,6 +3,7 @@
 
 import argparse
 import datetime
+import json
 import os
 import socket
 import shutil
@@ -14,6 +15,7 @@ from pathlib import Path
 CONFIG = Path("/etc/pictl.conf")
 FAN_MODE = Path("/etc/pictl-fan-mode")
 BATTERY_LOG = Path("/var/lib/pictl/battery.csv")
+BATTERY_STATE = Path("/var/lib/pictl/battery-state.json")
 BATTERY_FULL_CONFIRM_SECONDS = 3
 DEFAULTS = {
     "FAN_GPIO": "13",
@@ -22,6 +24,8 @@ DEFAULTS = {
     "I2C_BUS": "1",
     "BATTERY_ADDRESS": "0x66",
     "BATTERY_REGISTER": "0x01",
+    "BATTERY_CAPACITY_MAH": "2600",
+    "BATTERY_CHARGE_MA": "1000",
     "BATTERY_LOW": "0",
     "BATTERY_AUTO_SHUTDOWN": "1",
     "OLED_ADDRESS": "0x3c",
@@ -139,12 +143,69 @@ def battery_daemon(args):
     auto_shutdown = cfg["BATTERY_AUTO_SHUTDOWN"].lower() in ("1", "yes", "true", "on")
     low_count = 0
     BATTERY_LOG.parent.mkdir(parents=True, exist_ok=True)
+    state = load_battery_state()
+    displayed = state.get("percent")
+    displayed = float(displayed) if displayed is not None else None
+    charging = state.get("status") == "charging"
+    charge_start_percent = float(state.get("charge_start_percent", displayed or 0))
+    charge_start_time = float(state.get("charge_start_time", time.time()))
+    discharge_start_time = state.get("discharge_start_time")
+    last_update = float(state.get("updated", time.time()))
+    last_raw = state.get("raw")
+    saw_below_full = ((last_raw is not None and float(last_raw) < 100)
+                      or (last_raw is None and displayed is not None and displayed < 100))
+    pending_full_since = None
+    capacity_mah = max(1.0, float(cfg["BATTERY_CAPACITY_MAH"]))
+    charge_ma = max(0.0, float(cfg["BATTERY_CHARGE_MA"]))
     while True:
         try:
-            value = battery_value()
-            record_battery(value)
-            print(f"电量：{value}%（本次循环已记录）", flush=True)
-            if value <= low:
+            raw = battery_value()
+            now = time.time()
+            if charging and raw == 100:
+                gained = (now - charge_start_time) * charge_ma / (capacity_mah * 3600) * 100
+                displayed = min(100.0, charge_start_percent + gained)
+            elif charging:
+                charging = False
+                discharge_start_time = now
+                saw_below_full = True
+                pending_full_since = None
+            elif raw == 100:
+                if displayed is None:
+                    previous = next((value for _, value in reversed(battery_history())
+                                     if value < 100), None)
+                    if previous is not None:
+                        displayed = float(previous)
+                        saw_below_full = True
+                if pending_full_since is None:
+                    pending_full_since = now
+                    charge_start_percent = displayed if displayed is not None else 0.0
+                if saw_below_full and now - pending_full_since >= BATTERY_FULL_CONFIRM_SECONDS:
+                    charging = True
+                    discharge_start_time = None
+                    charge_start_time = pending_full_since
+                    gained = (now - charge_start_time) * charge_ma / (capacity_mah * 3600) * 100
+                    displayed = min(100.0, charge_start_percent + gained)
+            else:
+                saw_below_full = True
+                pending_full_since = None
+                if displayed is None:
+                    displayed = float(raw)
+                else:
+                    # Limit normal movement to 1 percentage point per minute,
+                    # preventing noisy raw readings from making the OLED jump.
+                    limit = max(0.05, (now - last_update) / 60.0)
+                    delta = max(-limit, min(limit, raw - displayed))
+                    displayed = max(0.0, min(100.0, displayed + delta))
+
+            if displayed is None:
+                displayed = float(raw)
+            save_battery_state(displayed, raw, charging, now,
+                               charge_start_percent, charge_start_time,
+                               discharge_start_time)
+            record_battery(displayed)
+            print(f"电量：{displayed:.1f}%（原始 {raw}%，本次循环已记录）", flush=True)
+            last_update = now
+            if raw <= low:
                 print(f"警告：电量达到 {low}%", file=sys.stderr, flush=True)
                 low_count += 1
                 if auto_shutdown and low_count >= 3:
@@ -164,6 +225,30 @@ def record_battery(value):
         BATTERY_LOG.write_text("timestamp,percent\n", encoding="ascii")
     with BATTERY_LOG.open("a", encoding="ascii") as handle:
         handle.write(f"{now},{value:.2f}\n")
+
+
+def load_battery_state():
+    try:
+        return json.loads(BATTERY_STATE.read_text(encoding="ascii"))
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def save_battery_state(percent, raw, charging, now,
+                       charge_start_percent, charge_start_time,
+                       discharge_start_time):
+    state = {
+        "percent": round(percent, 4),
+        "raw": raw,
+        "status": "charging" if charging else "discharging",
+        "updated": now,
+        "charge_start_percent": round(charge_start_percent, 4),
+        "charge_start_time": charge_start_time,
+        "discharge_start_time": discharge_start_time,
+    }
+    temporary = BATTERY_STATE.with_suffix(".tmp")
+    temporary.write_text(json.dumps(state, separators=(",", ":")), encoding="ascii")
+    temporary.replace(BATTERY_STATE)
 
 
 def battery_history():
@@ -189,6 +274,13 @@ def battery_is_charging(history):
     rose_from_below_full = run_start > 0 and history[run_start - 1][1] < 100
     return (rose_from_below_full
             and history[-1][0] - history[run_start][0] >= BATTERY_FULL_CONFIRM_SECONDS)
+
+
+def displayed_battery():
+    state = load_battery_state()
+    if "percent" in state:
+        return float(state["percent"]), state.get("status") == "charging"
+    return float(battery_value()), False
 
 
 def battery_session_history(history=None):
@@ -232,7 +324,9 @@ def battery_session_history(history=None):
 def battery_elapsed_text(history):
     if not history:
         return "USED 00:00"
-    elapsed = max(0, history[-1][0] - history[0][0])
+    discharge_start = load_battery_state().get("discharge_start_time")
+    start = float(discharge_start) if discharge_start is not None else history[0][0]
+    elapsed = max(0, history[-1][0] - start)
     hours, remainder = divmod(elapsed, 3600)
     return f"USED {hours:02d}:{remainder // 60:02d}"
 
@@ -297,13 +391,14 @@ def oled_frame(cfg, page=0):
         except OSError:
             return ImageFont.load_default()
     try:
-        battery = f"{battery_value()}%"
+        shown_percent, charging = displayed_battery()
+        battery = f"{shown_percent:.1f}%"
     except Exception:
         battery = "--"
+        charging = False
     mode = FAN_MODE.read_text().strip() if FAN_MODE.exists() else "auto"
     full_history = battery_history()
     session_history = battery_session_history(full_history)
-    charging = battery_is_charging(full_history)
     pages = [
         (datetime.datetime.now().strftime("TIME %H:%M:%S"),
          datetime.datetime.now().strftime("DATE %m-%d")),
@@ -450,6 +545,8 @@ def configure():
         "I2C_BUS": "I²C 总线",
         "BATTERY_ADDRESS": "电量芯片地址",
         "BATTERY_REGISTER": "电量寄存器",
+        "BATTERY_CAPACITY_MAH": "电池容量 mAh",
+        "BATTERY_CHARGE_MA": "模拟充电电流 mA",
         "BATTERY_LOW": "低电量阈值 %",
         "BATTERY_AUTO_SHUTDOWN": "低电量自动关机（1/0）",
         "OLED_ADDRESS": "OLED I²C 地址",
