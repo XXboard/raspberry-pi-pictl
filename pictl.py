@@ -14,7 +14,7 @@ from pathlib import Path
 CONFIG = Path("/etc/pictl.conf")
 FAN_MODE = Path("/etc/pictl-fan-mode")
 BATTERY_LOG = Path("/var/lib/pictl/battery.csv")
-BATTERY_FULL_CONFIRM_SECONDS = 180
+BATTERY_FULL_CONFIRM_SECONDS = 10
 DEFAULTS = {
     "FAN_GPIO": "13",
     "FAN_ON_TEMP": "60",
@@ -180,35 +180,42 @@ def battery_history():
 
 
 def battery_is_charging(history):
-    """Return true after the current 100% run has lasted three minutes."""
+    """Return true after a below-full reading rises to 100% for ten seconds."""
     if not history or history[-1][1] != 100:
         return False
     run_start = len(history) - 1
     while run_start > 0 and history[run_start - 1][1] == 100:
         run_start -= 1
-    return history[-1][0] - history[run_start][0] >= BATTERY_FULL_CONFIRM_SECONDS
+    rose_from_below_full = run_start > 0 and history[run_start - 1][1] < 100
+    return (rose_from_below_full
+            and history[-1][0] - history[run_start][0] >= BATTERY_FULL_CONFIRM_SECONDS)
 
 
 def battery_session_history(history=None):
     """Return the active discharge cycle after a confirmed full charge.
 
-    A full charge is only confirmed when the gauge remains at exactly 100%
-    for at least three minutes. While it remains full, elapsed time stays at
-    zero. Once it drops, timing starts from the final 100% sample.
+    Charging is confirmed when a below-full reading rises to exactly 100%
+    and remains there for at least ten seconds. While it remains full,
+    elapsed time stays at zero. Once it drops, timing starts from the final
+    100% sample.
     """
     history = battery_history() if history is None else history
     if not history:
         return []
     confirmed_end = None
     full_run_start = None
+    rose_from_below_full = False
     for index, (stamp, value) in enumerate(history):
         if value == 100:
             if full_run_start is None:
                 full_run_start = index
-            if stamp - history[full_run_start][0] >= BATTERY_FULL_CONFIRM_SECONDS:
+                rose_from_below_full = index > 0 and history[index - 1][1] < 100
+            if (rose_from_below_full
+                    and stamp - history[full_run_start][0] >= BATTERY_FULL_CONFIRM_SECONDS):
                 confirmed_end = index
         else:
             full_run_start = None
+            rose_from_below_full = False
 
     if confirmed_end is None:
         return history
