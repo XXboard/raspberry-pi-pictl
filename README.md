@@ -2,7 +2,7 @@
 
 [中文说明](README_ZH.md)
 
-[Legacy Raspberry Pi 3 programs](legacy-pi3-programs/README.md)
+[Legacy Raspberry Pi 3 programs](https://github.com/XXboard/raspberry-pi3-legacy-programs)
 
 PiCtl is a lightweight Raspberry Pi management utility for a temperature-controlled fan, SSD1306 OLED status display, PCF8563 real-time clock, and an I²C battery gauge.
 

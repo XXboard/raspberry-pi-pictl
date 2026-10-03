@@ -2,7 +2,7 @@
 
 [English documentation](README.md)
 
-[Raspberry Pi 3 旧程序备份](legacy-pi3-programs/README.md)
+[Raspberry Pi 3 旧程序独立项目](https://github.com/XXboard/raspberry-pi3-legacy-programs)
 
 把旧笔记中的温控风扇、PCF8563 时钟和 I²C 电量检测整理成一个工具。
 
