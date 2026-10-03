@@ -17,6 +17,7 @@ FAN_MODE = Path("/etc/pictl-fan-mode")
 BATTERY_LOG = Path("/var/lib/pictl/battery.csv")
 BATTERY_STATE = Path("/var/lib/pictl/battery-state.json")
 BATTERY_FULL_CONFIRM_SECONDS = 3
+BATTERY_RISE_CONFIRM_SECONDS = 10
 DEFAULTS = {
     "FAN_GPIO": "13",
     "FAN_ON_TEMP": "60",
@@ -166,10 +167,14 @@ def battery_daemon(args):
             offline_gap = startup_time - last_update
             if offline_gap > 300:
                 discharge_start_time = float(discharge_start_time) + offline_gap
+            elif offline_gap < -60:
+                discharge_start_time = startup_time
     last_raw = state.get("raw")
     saw_below_full = ((last_raw is not None and float(last_raw) < 100)
                       or (last_raw is None and displayed is not None and displayed < 100))
     pending_full_since = None
+    pending_rise_since = None
+    rise_baseline = None
     capacity_mah = max(1.0, float(cfg["BATTERY_CAPACITY_MAH"]))
     charge_ma = max(0.0, float(cfg["BATTERY_CHARGE_MA"]))
     while True:
@@ -177,7 +182,7 @@ def battery_daemon(args):
             raw = battery_value()
             now = time.time()
             session_changed = False
-            if charging and raw == 100:
+            if charging and (last_raw is None or raw >= last_raw):
                 gained = (now - charge_start_time) * charge_ma / (capacity_mah * 3600) * 100
                 displayed = min(100.0, charge_start_percent + gained)
             elif charging:
@@ -187,6 +192,8 @@ def battery_daemon(args):
                 discharge_start_time = now
                 saw_below_full = True
                 pending_full_since = None
+                pending_rise_since = None
+                rise_baseline = None
             elif raw == 100:
                 if displayed is None:
                     previous = next((value for _, value in reversed(battery_history())
@@ -208,12 +215,34 @@ def battery_daemon(args):
             else:
                 saw_below_full = True
                 pending_full_since = None
-                if displayed is None or raw >= displayed:
-                    displayed = float(raw)
-                else:
-                    drop_per_minute = max(0.0, float(cfg["BATTERY_DROP_PERCENT_PER_MIN"]))
-                    allowed_drop = max(0.05, (now - last_update) * drop_per_minute / 60.0)
-                    displayed = max(float(raw), displayed - allowed_drop)
+                if pending_rise_since is not None:
+                    if raw > rise_baseline:
+                        if now - pending_rise_since >= BATTERY_RISE_CONFIRM_SECONDS:
+                            charging = True
+                            charge_cycles += 1
+                            session_changed = True
+                            discharge_start_time = None
+                            charge_start_time = pending_rise_since
+                            gained = ((now - charge_start_time) * charge_ma
+                                      / (capacity_mah * 3600) * 100)
+                            displayed = min(100.0, charge_start_percent + gained)
+                    else:
+                        pending_rise_since = None
+                        rise_baseline = None
+                elif last_raw is not None and raw > last_raw:
+                    pending_rise_since = now
+                    rise_baseline = float(last_raw)
+                    charge_start_percent = displayed if displayed is not None else float(last_raw)
+
+                # Hold the previous displayed level while an upward reading is
+                # being confirmed, so a noisy sample does not jump the OLED.
+                if not charging and pending_rise_since is None:
+                    if displayed is None or raw >= displayed:
+                        displayed = float(raw)
+                    else:
+                        drop_per_minute = max(0.0, float(cfg["BATTERY_DROP_PERCENT_PER_MIN"]))
+                        allowed_drop = max(0.05, (now - last_update) * drop_per_minute / 60.0)
+                        displayed = max(float(raw), displayed - allowed_drop)
 
             if displayed is None:
                 displayed = float(raw)
@@ -226,6 +255,7 @@ def battery_daemon(args):
             record_battery(displayed)
             print(f"电量：{displayed:.1f}%（原始 {raw}%，本次循环已记录）", flush=True)
             last_update = now
+            last_raw = raw
             if raw <= low:
                 print(f"警告：电量达到 {low}%", file=sys.stderr, flush=True)
                 low_count += 1
