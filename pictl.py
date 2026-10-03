@@ -26,6 +26,7 @@ DEFAULTS = {
     "BATTERY_REGISTER": "0x01",
     "BATTERY_CAPACITY_MAH": "2600",
     "BATTERY_CHARGE_MA": "1000",
+    "BATTERY_DROP_PERCENT_PER_MIN": "1",
     "BATTERY_LOW": "0",
     "BATTERY_AUTO_SHUTDOWN": "1",
     "OLED_ADDRESS": "0x3c",
@@ -150,6 +151,7 @@ def battery_daemon(args):
     charge_start_percent = float(state.get("charge_start_percent", displayed or 0))
     charge_start_time = float(state.get("charge_start_time", time.time()))
     discharge_start_time = state.get("discharge_start_time")
+    last_update = float(state.get("updated", time.time()))
     last_raw = state.get("raw")
     saw_below_full = ((last_raw is not None and float(last_raw) < 100)
                       or (last_raw is None and displayed is not None and displayed < 100))
@@ -187,7 +189,12 @@ def battery_daemon(args):
             else:
                 saw_below_full = True
                 pending_full_since = None
-                displayed = float(raw)
+                if displayed is None or raw >= displayed:
+                    displayed = float(raw)
+                else:
+                    drop_per_minute = max(0.0, float(cfg["BATTERY_DROP_PERCENT_PER_MIN"]))
+                    allowed_drop = max(0.05, (now - last_update) * drop_per_minute / 60.0)
+                    displayed = max(float(raw), displayed - allowed_drop)
 
             if displayed is None:
                 displayed = float(raw)
@@ -196,6 +203,7 @@ def battery_daemon(args):
                                discharge_start_time)
             record_battery(displayed)
             print(f"电量：{displayed:.1f}%（原始 {raw}%，本次循环已记录）", flush=True)
+            last_update = now
             if raw <= low:
                 print(f"警告：电量达到 {low}%", file=sys.stderr, flush=True)
                 low_count += 1
@@ -538,6 +546,7 @@ def configure():
         "BATTERY_REGISTER": "电量寄存器",
         "BATTERY_CAPACITY_MAH": "电池容量 mAh",
         "BATTERY_CHARGE_MA": "模拟充电电流 mA",
+        "BATTERY_DROP_PERCENT_PER_MIN": "放电显示每分钟最大下降 %",
         "BATTERY_LOW": "低电量阈值 %",
         "BATTERY_AUTO_SHUTDOWN": "低电量自动关机（1/0）",
         "OLED_ADDRESS": "OLED I²C 地址",
