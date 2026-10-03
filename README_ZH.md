@@ -2,6 +2,8 @@
 
 [English documentation](README.md)
 
+[Raspberry Pi 3 旧程序备份](legacy-pi3-programs/README.md)
+
 把旧笔记中的温控风扇、PCF8563 时钟和 I²C 电量检测整理成一个工具。
 
 支持使用 `apt` 和 systemd 的树莓派发行版：

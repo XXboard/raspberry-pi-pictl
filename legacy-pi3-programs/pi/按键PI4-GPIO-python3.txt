@@ -1,0 +1,19 @@
+cd /home/pi
+sudo apt update
+sudo apt install python3-gpiozero
+sudo vim fan.py
+
+
+from gpiozero import Button
+button=Button(22)
+while True:
+    button.wait_for_press()
+    #a=button.wait_for_press()#if key was pressed,a=True ,a is a KEY_flag
+    print("the button was pressed")
+    button.wait_for_inactive()
+    print("the tutton was released")
+    
+wq　保存
+
+sudo python3 key.py
+运行后，按按键会打印the button was pressed
