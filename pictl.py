@@ -16,7 +16,7 @@ FAN_MODE = Path("/etc/pictl-fan-mode")
 BATTERY_LOG = Path("/var/lib/pictl/battery.csv")
 DEFAULTS = {
     "FAN_GPIO": "13",
-    "FAN_ON_TEMP": "45",
+    "FAN_ON_TEMP": "60",
     "FAN_OFF_TEMP": "39",
     "I2C_BUS": "1",
     "BATTERY_ADDRESS": "0x66",

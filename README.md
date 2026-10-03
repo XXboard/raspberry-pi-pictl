@@ -13,7 +13,32 @@
 
 完整接线、安装、操作和排错方法请参阅 [使用说明.md](使用说明.md)。
 
-## 一键安装
+## 一键完整安装
+
+在 Raspberry Pi OS、Ubuntu for Raspberry Pi 或 Kali ARM 中执行：
+
+```bash
+sudo apt update && sudo apt install -y git
+git clone https://github.com/XXboard/raspberry-pi-pictl.git
+cd raspberry-pi-pictl
+sudo bash install.sh --full
+sudo reboot
+```
+
+`--full` 会一次完成：
+
+- 安装 Python、GPIO、I²C 和 OLED 依赖
+- 安装 `pictl` 中文管理命令
+- 启用 60°C 开、39°C 关的温控风扇
+- 启用 SSD1306 OLED 两行轮播
+- 启用电量曲线记录和 5% 自动安全关机
+- 设置 `Asia/Shanghai` 中国时区
+- 启用 PCF8563 和网络自动校时
+- 设置全部 systemd 开机服务
+
+> 默认硬件参数为风扇 BCM GPIO 13、OLED `0x3C`（128×32）、PCF8563 `0x51`、电量芯片 `0x66`。硬件不同请在安装后运行 `sudo pictl config` 修改。
+
+## 基础安装
 
 ```bash
 chmod +x install.sh
@@ -46,7 +71,7 @@ pictl time status            # 查看时间同步状态
 sudo pictl uninstall         # 卸载
 ```
 
-配置保存在 `/etc/pictl.conf`。默认使用 BCM GPIO 13；风扇高于 45°C 开启，低于 39°C 关闭。OLED 默认使用 I²C 地址 `0x3c`、128×32 分辨率（原 Adafruit `stats.py` 的默认型号），并以两行大字每 3 秒轮播时间/日期、温度/风扇和电量/IP；分辨率及换页时间可通过 `sudo pictl config` 修改。
+配置保存在 `/etc/pictl.conf`。默认使用 BCM GPIO 13；风扇高于 60°C 开启，低于 39°C 关闭。OLED 默认使用 I²C 地址 `0x3c`、128×32 分辨率（原 Adafruit `stats.py` 的默认型号），并以两行大字每 3 秒轮播时间/日期、温度/风扇和电量/IP；分辨率及换页时间可通过 `sudo pictl config` 修改。
 
 电量监控约每 30 秒保存一个平均值到 `/var/lib/pictl/battery.csv`。从第一条记录开始累计使用时间，OLED 会显示已使用小时:分钟及电量—时间曲线；连续三次检测到 5% 或更低时自动安全关机。
 

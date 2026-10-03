@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+FULL_INSTALL=false
+if [[ ${1:-} == "--full" ]]; then
+  FULL_INSTALL=true
+elif [[ $# -gt 0 ]]; then
+  echo "用法：sudo bash install.sh [--full]" >&2
+  exit 1
+fi
+
 if [[ ${EUID} -ne 0 ]]; then
   echo "请使用 sudo ./install.sh" >&2
   exit 1
@@ -46,7 +54,7 @@ install -m 0644 "${SCRIPT_DIR}/pictl-time-sync.timer" /etc/systemd/system/pictl-
 if [[ ! -f /etc/pictl.conf ]]; then
   cat >/etc/pictl.conf <<'EOF'
 FAN_GPIO=13
-FAN_ON_TEMP=45
+FAN_ON_TEMP=60
 FAN_OFF_TEMP=39
 I2C_BUS=1
 BATTERY_ADDRESS=0x66
@@ -70,9 +78,19 @@ model="$(tr -d '\0' </proc/device-tree/model 2>/dev/null || true)"
 if [[ "${model}" == *"Raspberry Pi"* ]]; then
   systemctl enable --now pictl-fan.service
   echo "检测到 ${model}，温控风扇服务已启动。"
+
+  if [[ "${FULL_INSTALL}" == true ]]; then
+    echo "正在配置完整硬件功能..."
+    /usr/bin/pictl time setup
+    systemctl enable pictl-display.service pictl-battery.service
+    echo "OLED、电量记录、5% 自动关机、RTC 和网络校时已设置为开机启动。"
+  fi
 else
   echo "未检测到 Raspberry Pi 硬件，程序已安装，但未启动 GPIO 风扇服务。"
 fi
 
 echo "[4/4] 完成。"
 echo "运行 sudo pictl 打开中文菜单；运行 pictl status 查看状态。"
+if [[ "${FULL_INSTALL}" == true ]]; then
+  echo "请执行 sudo reboot，使 I²C、RTC、OLED 和全部服务生效。"
+fi
