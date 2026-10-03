@@ -1,0 +1,13 @@
+[Unit]
+Description=PiCtl SSD1306 OLED status display
+After=multi-user.target pictl-fan.service
+
+[Service]
+Type=simple
+ExecStartPre=/sbin/modprobe i2c-dev
+ExecStart=/usr/bin/pictl display-daemon
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

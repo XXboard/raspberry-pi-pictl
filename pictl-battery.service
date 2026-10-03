@@ -1,0 +1,13 @@
+[Unit]
+Description=PiCtl I2C battery monitor
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/pictl battery-daemon
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+

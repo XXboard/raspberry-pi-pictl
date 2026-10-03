@@ -1,0 +1,8 @@
+[Unit]
+Description=PiCtl network time to PCF8563 sync
+After=systemd-timesyncd.service
+
+[Service]
+Type=oneshot
+ExecStartPre=/sbin/modprobe i2c-dev
+ExecStart=/usr/bin/pictl time sync

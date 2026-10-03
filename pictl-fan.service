@@ -1,0 +1,13 @@
+[Unit]
+Description=PiCtl temperature controlled fan
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/pictl fan-daemon
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+
